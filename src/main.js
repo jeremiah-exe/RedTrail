@@ -4,8 +4,9 @@ import {
   initMap, zoomBy, setOrthoVisible, setOrthoOpacity, marsXYToLatLon,
   parseCoordinateInput, showSearchMarker, flyToXY,
   initOverlays, isMeasureActive, setMeasureActive, undoLastMeasurePoint, clearMeasurement,
+  initPoints, setPointMarker, removePointMarker,
 } from './map.js';
-import { loadTerrain, sampleAt, getCell } from './terrain.js';
+import { loadTerrain, sampleAt, getCell, findValidCell } from './terrain.js';
 
 /* ==========================================================================
    main.js — application entry point
@@ -90,10 +91,7 @@ function initLayersWidget() {
 
 function initPlaceholderButtons() {
   const later = {
-    'btn-pick-start': 'Point selection arrives in Stage 4.',
-    'btn-pick-dest': 'Point selection arrives in Stage 4.',
-    'btn-swap': 'Point selection arrives in Stage 4.',
-    'btn-reset': 'Point selection arrives in Stage 4.',
+    'btn-calc-routes': 'Route calculation arrives in Stage 5.',
   };
 
   Object.entries(later).forEach(([id, message]) => {
@@ -138,6 +136,126 @@ function startTerrainLoading() {
       $('cursor-slope').textContent = 'SLOPE unavailable';
       showToast(`Terrain data failed to load: ${err.message}`, 9000);
     });
+}
+
+/* ---------- Start / destination selection (Stage 4) ---------- */
+
+// Each point: { x, y (cell centre, map metres), col, row, elevation, slope }
+const selection = { start: null, dest: null };
+// null = auto-sequence; 'start' or 'dest' = one-shot override set by the Pick buttons
+let pickTarget = null;
+
+const LABEL = { start: 'Start (A)', dest: 'Destination (B)' };
+
+function formatLatLon(x, y) {
+  const { lat, lon } = marsXYToLatLon(x, y);
+  return `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? 'N' : 'S'} ${lon.toFixed(4)}°E`;
+}
+
+function renderSelection() {
+  const { start, dest } = selection;
+
+  $('start-coords').textContent = start ? formatLatLon(start.x, start.y) : 'Click the map to set';
+  $('dest-coords').textContent = dest ? formatLatLon(dest.x, dest.y) : 'Click the map to set';
+
+  const rows = [['A', start], ['B', dest]].filter(([, p]) => p);
+  $('tele-elev').innerHTML = rows.length
+    ? rows.map(([n, p]) => `<div>${n} ${p.elevation.toFixed(1)} m</div>`).join('')
+    : '—';
+  $('tele-slope').innerHTML = rows.length
+    ? rows.map(([n, p]) => `<div>${n} ${p.slope.toFixed(1)}°</div>`).join('')
+    : '—';
+
+  $('btn-pick-start').classList.toggle('active', pickTarget === 'start');
+  $('btn-pick-dest').classList.toggle('active', pickTarget === 'dest');
+
+  let msg;
+  if (pickTarget) msg = `Click the map to place ${LABEL[pickTarget]}.`;
+  else if (!start) msg = 'Click the map to set the start (A).';
+  else if (!dest) msg = 'Start set. Click the map to set the destination (B).';
+  else msg = 'Both points set. Click the map to move B, or drag A or B.';
+  $('selection-status').textContent = msg;
+
+  $('btn-calc-routes').disabled = !(start && dest);
+}
+
+function setPickTarget(target) {
+  pickTarget = target;
+  if (target && isMeasureActive()) setMeasureActive(false); // measuring and picking can't share clicks
+  renderSelection();
+}
+
+/** Validates, snaps and places a point. Returns true on success. */
+function placePoint(which, [x, y]) {
+  const r = findValidCell(x, y);
+
+  if (r.status === 'loading') {
+    showToast('Terrain data is still loading. Try again in a moment.');
+    return false;
+  }
+  if (r.status === 'outside') {
+    showToast('That location is outside the elevation data.');
+    return false;
+  }
+  if (r.status === 'none') {
+    showToast(`No valid terrain within ${r.searchM} m of that spot (missing data). Pick another location.`, 5000);
+    return false;
+  }
+
+  selection[which] = { x: r.x, y: r.y, col: r.col, row: r.row, elevation: r.elevation, slope: r.slope };
+  setPointMarker(which, r.x, r.y);
+  if (r.moved) {
+    showToast(
+      `${LABEL[which]} moved ${Math.round(r.movedM)} m to the nearest cell with valid elevation and slope data.`,
+      5000
+    );
+  }
+  renderSelection();
+  return true;
+}
+
+function onMapSelectClick(coord) {
+  let which;
+  if (pickTarget) which = pickTarget;
+  else if (!selection.start) which = 'start';
+  else which = 'dest'; // 2nd click sets B; later clicks move B
+
+  if (placePoint(which, coord)) setPickTarget(null);
+}
+
+function onPointDragEnd(which, coord) {
+  if (!placePoint(which, coord)) {
+    // Invalid drop: put the marker back where it was
+    const prev = selection[which];
+    if (prev) setPointMarker(which, prev.x, prev.y);
+  }
+}
+
+function swapPoints() {
+  if (!selection.start && !selection.dest) return;
+  [selection.start, selection.dest] = [selection.dest, selection.start];
+  ['start', 'dest'].forEach((w) => {
+    const p = selection[w];
+    if (p) setPointMarker(w, p.x, p.y);
+    else removePointMarker(w);
+  });
+  renderSelection();
+}
+
+function resetPoints() {
+  selection.start = null;
+  selection.dest = null;
+  removePointMarker('start');
+  removePointMarker('dest');
+  setPickTarget(null);
+}
+
+function initSelectionControls() {
+  $('btn-pick-start').addEventListener('click', () => setPickTarget(pickTarget === 'start' ? null : 'start'));
+  $('btn-pick-dest').addEventListener('click', () => setPickTarget(pickTarget === 'dest' ? null : 'dest'));
+  $('btn-swap').addEventListener('click', swapPoints);
+  $('btn-reset').addEventListener('click', resetPoints);
+  renderSelection();
 }
 
 /* ---------- Start-up ---------- */
@@ -214,10 +332,15 @@ function init() {
     onError: (msg) => showToast(msg, 6000),
   });
   initOverlays({ onMeasureChange: renderMeasure });
+  initPoints({ onMapClick: onMapSelectClick, onPointDragEnd });
   initMapControls();
+  initSelectionControls();
   startTerrainLoading();
-  window.terrainDebug = { sampleAt, getCell }; // for checking values against QGIS in the console
-  console.log('[app] Stage 2: map, search and measure ready.');
+
+  // For checking values against QGIS in the browser console
+  window.terrainDebug = { sampleAt, getCell, findValidCell, selection };
+
+  console.log('[app] Stage 4: point selection ready.');
 }
 
 init();

@@ -13,7 +13,8 @@ import VectorSource from 'ol/source/Vector.js';
 import Feature from 'ol/Feature.js';
 import Point from 'ol/geom/Point.js';
 import LineString from 'ol/geom/LineString.js';
-import { Style, Circle as CircleStyle, Fill, Stroke } from 'ol/style.js';
+import { Style, Circle as CircleStyle, Fill, Stroke, Text } from 'ol/style.js';
+import Translate from 'ol/interaction/Translate.js';
 import DoubleClickZoom from 'ol/interaction/DoubleClickZoom.js';
 import proj4 from 'proj4';
 
@@ -333,6 +334,7 @@ export function setMeasureActive(active) {
     if (i instanceof DoubleClickZoom) i.setActive(!active);
   });
   map.getTargetElement().style.cursor = active ? 'crosshair' : '';
+  if (translateInteraction) translateInteraction.setActive(!active); // no marker dragging while measuring
   redrawMeasure();
 }
 
@@ -345,4 +347,93 @@ export function undoLastMeasurePoint() {
 export function clearMeasurement() {
   measurePoints = [];
   setMeasureActive(false);
+}
+
+/* ==========================================================================
+   Start (A) / destination (B) markers
+   ========================================================================== */
+
+let pointSource = null;
+let pointLayer = null;
+let translateInteraction = null;
+const pointFeatures = { start: null, dest: null };
+
+const POINT_STYLE = {
+  start: { solid: '#38bdf8', halo: 'rgba(56, 189, 248, 0.25)', letter: 'A' },
+  dest: { solid: '#f97316', halo: 'rgba(249, 115, 22, 0.25)', letter: 'B' },
+};
+
+function pointStyle(feature) {
+  const s = POINT_STYLE[feature.get('which')];
+  return [
+    new Style({ image: new CircleStyle({ radius: 16, fill: new Fill({ color: s.halo }) }) }),
+    new Style({
+      image: new CircleStyle({
+        radius: 10,
+        fill: new Fill({ color: s.solid }),
+        stroke: new Stroke({ color: '#ffffff', width: 2 }),
+      }),
+      text: new Text({
+        text: s.letter,
+        font: '700 11px "JetBrains Mono", monospace',
+        fill: new Fill({ color: '#090a0f' }),
+      }),
+    }),
+  ];
+}
+
+/**
+ * Call once, after initMap().
+ * onMapClick(coordinate)           -> a plain click on the map (not on a marker)
+ * onPointDragEnd(which, coordinate)-> a marker was dropped; which = 'start' | 'dest'
+ */
+export function initPoints({ onMapClick, onPointDragEnd }) {
+  pointSource = new VectorSource();
+  pointLayer = new VectorLayer({ source: pointSource, style: pointStyle, zIndex: 40 });
+  map.addLayer(pointLayer);
+
+  const onMarker = (pixel) =>
+    map.hasFeatureAtPixel(pixel, { layerFilter: (layer) => layer === pointLayer });
+
+  // Marker dragging
+  translateInteraction = new Translate({ layers: [pointLayer] });
+  translateInteraction.on('translateend', (evt) => {
+    const f = evt.features.item(0);
+    onPointDragEnd(f.get('which'), f.getGeometry().getCoordinates());
+  });
+  map.addInteraction(translateInteraction);
+
+  // 'singleclick' ignores double-clicks, so double-click-to-zoom doesn't place points
+  map.on('singleclick', (evt) => {
+    if (measureActive) return; // measuring takes over map clicks
+    if (onMarker(evt.pixel)) return; // clicking a marker must not place a new point
+    onMapClick(evt.coordinate);
+  });
+
+  // Show a grab cursor over markers
+  map.on('pointermove', (evt) => {
+    if (evt.dragging || measureActive) return;
+    map.getTargetElement().style.cursor = onMarker(evt.pixel) ? 'grab' : '';
+  });
+}
+
+/** Creates the marker, or moves it if it already exists. which = 'start' | 'dest' */
+export function setPointMarker(which, x, y) {
+  let f = pointFeatures[which];
+  if (!f) {
+    f = new Feature(new Point([x, y]));
+    f.set('which', which);
+    pointFeatures[which] = f;
+    pointSource.addFeature(f);
+  } else {
+    f.getGeometry().setCoordinates([x, y]);
+  }
+}
+
+export function removePointMarker(which) {
+  const f = pointFeatures[which];
+  if (f) {
+    pointSource.removeFeature(f);
+    pointFeatures[which] = null;
+  }
 }

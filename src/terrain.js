@@ -177,3 +177,67 @@ export function sampleAt(x, y) {
   if (!p) return { status: 'outside' };
   return getCell(p.col, p.row);
 }
+
+/* ---------- Validity and snapping (Stage 4) ---------- */
+
+/** A cell is usable for routing only if BOTH elevation and slope are real values. */
+export function isValidCell(col, row) {
+  const c = getCell(col, row);
+  return c.status === 'ok' && c.elevation !== null && c.slope !== null;
+}
+
+/**
+ * Finds the cell for a clicked point. If that cell is valid, it is used.
+ * If it is NoData, searches outward (ring by ring, up to maxRadiusCells)
+ * for the nearest valid cell.
+ *
+ * Returns { status: 'loading' | 'outside' | 'none' | 'ok', ... }
+ * 'ok' includes: col, row, elevation, slope, x, y (cell CENTRE in map metres),
+ *                moved (true if a different cell than the clicked one),
+ *                movedM (metres from the click to the chosen cell centre).
+ */
+export function findValidCell(x, y, maxRadiusCells = 25) {
+  if (!terrain) return { status: 'loading' };
+  const p = pixelOf(x, y);
+  if (!p) return { status: 'outside' };
+
+  let col = p.col;
+  let row = p.row;
+
+  if (!isValidCell(col, row)) {
+    let best = null;
+    let bestD = Infinity;
+    for (let r = 1; r <= maxRadiusCells; r++) {
+      for (let dr = -r; dr <= r; dr++) {
+        for (let dc = -r; dc <= r; dc++) {
+          if (Math.max(Math.abs(dr), Math.abs(dc)) !== r) continue; // ring r only
+          if (!isValidCell(p.col + dc, p.row + dr)) continue;
+          const d = Math.hypot(dr, dc);
+          if (d < bestD) {
+            bestD = d;
+            best = { col: p.col + dc, row: p.row + dr };
+          }
+        }
+      }
+      // Cells in later rings are at least r+1 cells away, so we can stop early
+      if (best && bestD <= r + 1) break;
+    }
+    if (!best) return { status: 'none', searchM: maxRadiusCells * terrain.cell };
+    col = best.col;
+    row = best.row;
+  }
+
+  const cell = getCell(col, row);
+  const c = cellCenter(col, row);
+  return {
+    status: 'ok',
+    col,
+    row,
+    elevation: cell.elevation,
+    slope: cell.slope,
+    x: c.x,
+    y: c.y,
+    moved: col !== p.col || row !== p.row,
+    movedM: Math.hypot(c.x - x, c.y - y),
+  };
+}
