@@ -5,6 +5,7 @@ import {
   parseCoordinateInput, showSearchMarker, flyToXY,
   initOverlays, isMeasureActive, setMeasureActive, undoLastMeasurePoint, clearMeasurement,
 } from './map.js';
+import { loadTerrain, sampleAt, getCell } from './terrain.js';
 
 /* ==========================================================================
    main.js — application entry point
@@ -105,6 +106,40 @@ function initPlaceholderButtons() {
   });
 }
 
+/* ---------- Terrain readout (live, from real DEM + slope) ---------- */
+
+function updateTerrainReadout([x, y]) {
+  const s = sampleAt(x, y);
+  let elev, slope;
+  if (s.status === 'loading') {
+    elev = 'ELEV loading…';
+    slope = 'SLOPE loading…';
+  } else if (s.status === 'outside') {
+    elev = 'ELEV outside data';
+    slope = 'SLOPE outside data';
+  } else {
+    elev = s.elevation === null ? 'ELEV no data' : `ELEV ${s.elevation.toFixed(1)} m`;
+    slope = s.slope === null ? 'SLOPE no data' : `SLOPE ${s.slope.toFixed(1)}°`;
+  }
+  $('cursor-elev').textContent = elev;
+  $('cursor-slope').textContent = slope;
+}
+
+function startTerrainLoading() {
+  $('cursor-elev').textContent = 'ELEV loading…';
+  $('cursor-slope').textContent = 'SLOPE loading…';
+  showToast('Loading elevation and slope data (first load takes a few seconds)…', 5000);
+
+  loadTerrain()
+    .then((info) => showToast(`Terrain data ready (${info.seconds} s)`))
+    .catch((err) => {
+      console.error('[terrain] load failed', err);
+      $('cursor-elev').textContent = 'ELEV unavailable';
+      $('cursor-slope').textContent = 'SLOPE unavailable';
+      showToast(`Terrain data failed to load: ${err.message}`, 9000);
+    });
+}
+
 /* ---------- Start-up ---------- */
 
 /* ---------- Map wiring ---------- */
@@ -174,12 +209,14 @@ function init() {
     target: $('map'),
     onPointerMove: (coord) => {
       $('cursor-coords').textContent = formatCursor(coord);
+      updateTerrainReadout(coord);
     },
     onError: (msg) => showToast(msg, 6000),
   });
   initOverlays({ onMeasureChange: renderMeasure });
   initMapControls();
-
+  startTerrainLoading();
+  window.terrainDebug = { sampleAt, getCell }; // for checking values against QGIS in the console
   console.log('[app] Stage 2: map, search and measure ready.');
 }
 
