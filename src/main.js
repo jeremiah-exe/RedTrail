@@ -5,7 +5,9 @@ import {
   parseCoordinateInput, showSearchMarker, flyToXY,
   initOverlays, isMeasureActive, setMeasureActive, undoLastMeasurePoint, clearMeasurement,
   initPoints, setPointMarker, removePointMarker,
+  initRoutes, setRoutes, clearRoutes, setRouteOverlaysVisible, fitToCoordinates,
 } from './map.js';
+import { computeRoutes, verifyRoute, ROUTING_CONFIG } from './routing.js';
 import { loadTerrain, sampleAt, getCell, findValidCell } from './terrain.js';
 
 /* ==========================================================================
@@ -91,7 +93,6 @@ function initLayersWidget() {
 
 function initPlaceholderButtons() {
   const later = {
-    'btn-calc-routes': 'Route calculation arrives in Stage 5.',
   };
 
   Object.entries(later).forEach(([id, message]) => {
@@ -204,6 +205,7 @@ function placePoint(which, [x, y]) {
 
   selection[which] = { x: r.x, y: r.y, col: r.col, row: r.row, elevation: r.elevation, slope: r.slope };
   setPointMarker(which, r.x, r.y);
+  clearRouteResults();
   if (r.moved) {
     showToast(
       `${LABEL[which]} moved ${Math.round(r.movedM)} m to the nearest cell with valid elevation and slope data.`,
@@ -234,6 +236,7 @@ function onPointDragEnd(which, coord) {
 function swapPoints() {
   if (!selection.start && !selection.dest) return;
   [selection.start, selection.dest] = [selection.dest, selection.start];
+  clearRouteResults();
   ['start', 'dest'].forEach((w) => {
     const p = selection[w];
     if (p) setPointMarker(w, p.x, p.y);
@@ -245,6 +248,7 @@ function swapPoints() {
 function resetPoints() {
   selection.start = null;
   selection.dest = null;
+  clearRouteResults();
   removePointMarker('start');
   removePointMarker('dest');
   setPickTarget(null);
@@ -256,6 +260,88 @@ function initSelectionControls() {
   $('btn-swap').addEventListener('click', swapPoints);
   $('btn-reset').addEventListener('click', resetPoints);
   renderSelection();
+}
+
+/* ---------- Route calculation (Stage 5) ---------- */
+
+let routesCurrent = null;
+
+function fmtDist(m) {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
+}
+
+function readMaxSlope() {
+  const input = $('max-slope-input');
+  let v = parseFloat(input.value);
+  if (!Number.isFinite(v)) v = ROUTING_CONFIG.maxSlopeDeg;
+  v = Math.max(10, Math.min(90, v));
+  input.value = v;
+  return v;
+}
+
+function clearRouteResults() {
+  routesCurrent = null;
+  clearRoutes();
+  $('sh-dist').textContent = '—';
+  $('tr-dist').textContent = '—';
+  $('direct-dist').textContent = '—';
+  $('route-explanation').textContent = 'Route trade-offs will be explained here after calculation.';
+}
+
+async function calculateRoutes() {
+  if (!selection.start || !selection.dest) return;
+  const btn = $('btn-calc-routes');
+  btn.disabled = true;
+  btn.textContent = 'Calculating…';
+  await new Promise((r) => setTimeout(r, 50)); // let the browser repaint before the heavy work
+
+  try {
+    const result = computeRoutes(selection.start, selection.dest, { maxSlopeDeg: readMaxSlope() });
+
+    if (result.status === 'error') {
+      clearRouteResults();
+      $('route-explanation').textContent = result.message;
+      showToast(result.message, 9000);
+      return;
+    }
+
+    routesCurrent = result;
+    setRoutes({
+      direct: result.direct.coords,
+      shortest: result.shortest.coords,
+      terrain: result.terrain.coords,
+    });
+    fitToCoordinates(result.shortest.coords.concat(result.terrain.coords));
+
+    $('sh-dist').textContent = fmtDist(result.shortest.surfaceM);
+    $('tr-dist').textContent = fmtDist(result.terrain.surfaceM);
+    $('direct-dist').textContent = `${fmtDist(result.direct.horizontalM)} (horizontal)`;
+
+    if (result.identical) {
+      $('route-explanation').textContent =
+        `Both searches found the same path (${fmtDist(result.shortest.surfaceM)} along the surface) under the ${result.maxSlopeDeg}° slope limit.`;
+    } else {
+      const pct = ((result.terrain.surfaceM - result.shortest.surfaceM) / result.shortest.surfaceM) * 100;
+      $('route-explanation').textContent =
+        `Shortest traversable: ${fmtDist(result.shortest.surfaceM)}. Terrain-aware: ${fmtDist(result.terrain.surfaceM)} ` +
+        `(${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%). Distances are along the surface; slope limit ${result.maxSlopeDeg}°. Full comparison arrives in Stage 6.`;
+    }
+  } catch (err) {
+    console.error('[routing] failed', err);
+    showToast(`Routing error: ${err.message}`, 8000);
+  } finally {
+    btn.textContent = 'Calculate routes';
+    renderSelection(); // restores the button's enabled state
+  }
+}
+
+function initRouteControls() {
+  $('btn-calc-routes').addEventListener('click', calculateRoutes);
+  $('max-slope-input').addEventListener('change', () => {
+    readMaxSlope();
+    clearRouteResults(); // old routes were computed under a different limit
+  });
+  $('layer-routes').addEventListener('change', (e) => setRouteOverlaysVisible(e.target.checked));
 }
 
 /* ---------- Start-up ---------- */
@@ -332,15 +418,24 @@ function init() {
     onError: (msg) => showToast(msg, 6000),
   });
   initOverlays({ onMeasureChange: renderMeasure });
+  initRoutes();
   initPoints({ onMapClick: onMapSelectClick, onPointDragEnd });
   initMapControls();
   initSelectionControls();
+  initRouteControls();
   startTerrainLoading();
 
-  // For checking values against QGIS in the browser console
-  window.terrainDebug = { sampleAt, getCell, findValidCell, selection };
+  // For checking values against QGIS and verifying routes in the browser console
+  window.terrainDebug = {
+    sampleAt, getCell, findValidCell, selection,
+    verifyLast: () =>
+      routesCurrent && {
+        shortest: verifyRoute(routesCurrent.shortest, routesCurrent.maxSlopeDeg),
+        terrain: verifyRoute(routesCurrent.terrain, routesCurrent.maxSlopeDeg),
+      },
+  };
 
-  console.log('[app] Stage 4: point selection ready.');
+  console.log('[app] Stage 5: routing ready.');
 }
 
 init();

@@ -77,6 +77,12 @@
           <button type="button" id="btn-reset" class="chip-btn">Reset</button>
           <button type="button" id="btn-calc-routes" class="primary-btn" disabled>Calculate routes</button>
         </div>
+        <div class="setting-row">
+          <label for="max-slope-input">Max passable slope</label>
+          <input type="number" id="max-slope-input" min="10" max="90" step="1" value="35" />
+          <span>°</span>
+        </div>
+        <p class="hint-text">Experimental assumption, not a validated astronaut mobility limit. Cells steeper than this are blocked for both routes. Use 90 for no limit.</p>
         <p class="hint-text" id="selection-status">No points selected.</p>
       </section>
 

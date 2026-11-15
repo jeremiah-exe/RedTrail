@@ -7,7 +7,7 @@ import { defaults as defaultControls } from 'ol/control/defaults.js';
 import { defaults as defaultInteractions } from 'ol/interaction/defaults.js';
 import { get as getProjection } from 'ol/proj.js';
 import { register } from 'ol/proj/proj4.js';
-import { buffer as bufferExtent, getCenter, containsCoordinate } from 'ol/extent.js';
+import { buffer as bufferExtent, getCenter, containsCoordinate, boundingExtent } from 'ol/extent.js';
 import VectorLayer from 'ol/layer/Vector.js';
 import VectorSource from 'ol/source/Vector.js';
 import Feature from 'ol/Feature.js';
@@ -436,4 +436,72 @@ export function removePointMarker(which) {
     pointSource.removeFeature(f);
     pointFeatures[which] = null;
   }
+}
+
+/* ==========================================================================
+   Route layer (direct line, shortest route, terrain-aware route)
+   ========================================================================== */
+
+let routeSource = null;
+let routeLayer = null;
+
+function routeStyle(feature) {
+  const kind = feature.get('kind');
+  if (kind === 'direct') {
+    return new Style({
+      stroke: new Stroke({ color: 'rgba(148, 163, 184, 0.95)', width: 2, lineDash: [3, 7] }),
+      zIndex: 1,
+    });
+  }
+  if (kind === 'shortest') {
+    return [
+      new Style({ stroke: new Stroke({ color: 'rgba(7, 10, 18, 0.85)', width: 8, lineCap: 'round', lineJoin: 'round' }), zIndex: 2 }),
+      new Style({ stroke: new Stroke({ color: '#f59e0b', width: 5, lineCap: 'round', lineJoin: 'round' }), zIndex: 3 }),
+    ];
+  }
+  // terrain-aware: thinner and drawn on top, so an overlapping shortest route stays visible
+  return new Style({
+    stroke: new Stroke({ color: '#38bdf8', width: 3, lineCap: 'round', lineJoin: 'round' }),
+    zIndex: 4,
+  });
+}
+
+/** Call once, after initOverlays() and before initPoints(). */
+export function initRoutes() {
+  routeSource = new VectorSource();
+  routeLayer = new VectorLayer({ source: routeSource, style: routeStyle, zIndex: 15 });
+  map.addLayer(routeLayer);
+}
+
+export function clearRoutes() {
+  if (routeSource) routeSource.clear();
+}
+
+/** Each argument is an array of [x, y] coordinates, or null. */
+export function setRoutes({ direct, shortest, terrain }) {
+  routeSource.clear();
+  const add = (kind, coords) => {
+    if (!coords || coords.length < 2) return;
+    const f = new Feature(new LineString(coords));
+    f.set('kind', kind);
+    routeSource.addFeature(f);
+  };
+  add('direct', direct);
+  add('shortest', shortest);
+  add('terrain', terrain);
+}
+
+/** The "Routes & markers" checkbox: shows or hides routes and the A/B markers. */
+export function setRouteOverlaysVisible(visible) {
+  if (routeLayer) routeLayer.setVisible(visible);
+  if (pointLayer) pointLayer.setVisible(visible);
+}
+
+export function fitToCoordinates(coords) {
+  if (!map || !coords.length) return;
+  map.getView().fit(boundingExtent(coords), {
+    padding: [90, 60, 90, 430], // leaves room for the left drawer
+    minResolution: 5, // never zoom closer than the 5 m imagery
+    duration: 600,
+  });
 }

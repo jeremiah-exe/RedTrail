@@ -776,3 +776,33 @@ button {
   }
   .telemetry-bar { display: none; }
 }
+/* ---------- Routing settings row ---------- */
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+}
+
+.setting-row label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.setting-row input[type="number"] {
+  width: 64px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 5px 8px;
+  outline: none;
+}
+
+.setting-row input[type="number"]:focus {
+  border-color: var(--accent-blue);
+}
