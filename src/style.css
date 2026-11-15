@@ -1,0 +1,778 @@
+/* ==========================================================================
+   Jezero Route Planner — styles
+   Ported from the ARES Explorer prototype (dark glass theme).
+   Sections: 1 Tokens · 2 Base · 3 Map · 4 Top clusters · 5 Drawer ·
+             6 Point/terrain/route components · 7 Layers · 8 Bottom controls ·
+             9 Toasts · 10 Responsive
+   ========================================================================== */
+
+/* ---------- 1. Design tokens ---------- */
+:root {
+  --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --surface-glass: rgba(15, 18, 26, 0.92);
+  --surface-card: #161a24;
+  --surface-elevated: #1f2433;
+  --surface-hover: #282f42;
+
+  --accent-blue: #38bdf8;
+  --accent-rust: #f97316;
+  --accent-amber: #f59e0b;
+  --accent-emerald: #10b981;
+  --accent-rose: #f43f5e;
+
+  /* Route colours are deliberately NEUTRAL (not green/red): neither route
+     is "safe" or "unsafe" — the user compares and chooses. */
+  --route-shortest: #f59e0b;
+  --route-terrain: #38bdf8;
+  --route-direct: #94a3b8;
+
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+
+  --border-subtle: rgba(255, 255, 255, 0.10);
+  --border-strong: rgba(255, 255, 255, 0.18);
+  --shadow-float: 0 8px 30px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* ---------- 2. Base ---------- */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #08090d;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.16); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent-blue); }
+
+/* ---------- 3. Full-bleed map ---------- */
+#map-viewport {
+  position: fixed;
+  inset: 0;
+  background: #07080c;
+}
+
+#map {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+#map-placeholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  border: 1px dashed var(--border-strong);
+  margin: 14px;
+  border-radius: 18px;
+  pointer-events: none;
+}
+
+/* ---------- 4. Top clusters ---------- */
+.top-left-cluster {
+  position: fixed;
+  top: 14px;
+  left: 14px;
+  z-index: 45;
+  width: 396px;
+  max-width: calc(100vw - 28px);
+}
+
+.search-box-card {
+  background: var(--surface-glass);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid var(--border-strong);
+  border-radius: 24px;
+  box-shadow: var(--shadow-float);
+  display: flex;
+  align-items: center;
+  padding: 6px 10px 6px 14px;
+  gap: 8px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-box-card:focus-within {
+  border-color: var(--accent-blue);
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.68), 0 0 0 2px rgba(56, 189, 248, 0.22);
+}
+
+.brand-mark {
+  color: var(--accent-rust);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+#coord-search-input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.84rem;
+  font-weight: 500;
+}
+
+#coord-search-input::placeholder {
+  color: var(--text-secondary);
+}
+
+.icon-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.18s ease, color 0.18s ease;
+}
+
+.icon-btn:hover {
+  background: var(--surface-hover);
+  color: var(--text-primary);
+}
+
+.top-right-cluster {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  z-index: 45;
+}
+
+.data-pill {
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 7px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-float);
+}
+
+.data-pill strong {
+  color: var(--accent-blue);
+}
+
+/* ---------- 5. Left drawer ---------- */
+.left-drawer {
+  position: fixed;
+  top: 78px;
+  left: 14px;
+  bottom: 76px;
+  width: 396px;
+  max-width: calc(100vw - 28px);
+  z-index: 40;
+  background: var(--surface-glass);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid var(--border-strong);
+  border-radius: 18px;
+  box-shadow: var(--shadow-float);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease;
+}
+
+.left-drawer.collapsed {
+  transform: translateX(calc(-100% - 24px));
+  opacity: 0;
+  pointer-events: none;
+}
+
+.drawer-reopen-tab {
+  position: fixed;
+  top: 78px;
+  left: 14px;
+  z-index: 39;
+  display: none;
+  background: var(--surface-glass);
+  backdrop-filter: blur(14px);
+  border: 1px solid var(--border-strong);
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 8px 13px;
+  border-radius: 999px;
+  box-shadow: var(--shadow-float);
+  cursor: pointer;
+}
+
+.drawer-reopen-tab.visible {
+  display: block;
+}
+
+.drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 14px 14px 12px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--surface-card);
+}
+
+.eyebrow {
+  font-family: var(--font-mono);
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--accent-blue);
+  letter-spacing: 0.04em;
+}
+
+.drawer-title {
+  font-family: var(--font-display);
+  font-size: 1.08rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.drawer-scroll {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.panel-section {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.panel-section:last-child {
+  border-bottom: none;
+}
+
+.section-title {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--accent-rust);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+
+.hint-text {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin-top: 8px;
+}
+
+/* ---------- 6. Point selection, terrain, route comparison ---------- */
+.point-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 8px 10px;
+  margin-bottom: 7px;
+}
+
+.point-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #090a0f;
+  flex-shrink: 0;
+}
+
+.point-dot.start { background: var(--accent-blue); }
+.point-dot.dest { background: var(--accent-rust); }
+
+.point-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.point-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.point-coords {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  color: var(--text-primary);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.button-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.chip-btn {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 6px 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.16s ease;
+}
+
+.chip-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--accent-blue);
+}
+
+.chip-btn.active {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: #070a10;
+}
+
+.primary-btn {
+  flex: 1;
+  background: linear-gradient(135deg, #0ea5e9, #0284c7);
+  color: #04121c;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(14, 165, 233, 0.28);
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.primary-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.primary-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* Terrain readout */
+.tele-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.tele-box {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: 11px;
+  padding: 8px 10px;
+}
+
+.tele-label {
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.tele-val {
+  font-family: var(--font-mono);
+  font-size: 0.86rem;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+/* Route comparison cards */
+.route-card {
+  background: var(--surface-elevated);
+  border: 1px solid var(--border-subtle);
+  border-left-width: 4px;
+  border-radius: 12px;
+  padding: 10px 12px;
+  margin-bottom: 9px;
+}
+
+.route-card.shortest { border-left-color: var(--route-shortest); }
+.route-card.terrain { border-left-color: var(--route-terrain); }
+
+.route-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+}
+
+.route-swatch {
+  width: 22px;
+  height: 4px;
+  border-radius: 2px;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.route-card.shortest .route-swatch { background: var(--route-shortest); }
+.route-card.terrain .route-swatch { background: var(--route-terrain); }
+
+.route-swatch.direct {
+  background: repeating-linear-gradient(90deg, var(--route-direct) 0 5px, transparent 5px 8px);
+}
+
+.route-desc {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin: 4px 0 8px;
+  line-height: 1.45;
+}
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.kpi {
+  background: rgba(9, 11, 17, 0.55);
+  border-radius: 9px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+}
+
+.kpi span {
+  display: block;
+  font-size: 0.56rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.kpi strong {
+  font-size: 0.76rem;
+}
+
+.direct-line-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.direct-line-row strong {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  color: var(--text-primary);
+}
+
+/* Elevation profile */
+.profile-box {
+  position: relative;
+  background: #0c0f17;
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  padding: 6px 8px;
+  min-height: 110px;
+}
+
+#elevation-profile-svg {
+  width: 100%;
+  height: 100px;
+  display: block;
+}
+
+.profile-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+/* ---------- 7. Layers widget (bottom-left) ---------- */
+.layers-widget {
+  position: fixed;
+  bottom: 18px;
+  left: 14px;
+  z-index: 46;
+}
+
+.layers-thumb {
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: var(--shadow-float);
+  transition: border-color 0.18s ease;
+}
+
+.layers-thumb:hover {
+  border-color: var(--accent-blue);
+}
+
+.layers-popover {
+  display: none;
+  position: absolute;
+  bottom: 48px;
+  left: 0;
+  width: 340px;
+  max-width: calc(100vw - 28px);
+  background: var(--surface-glass);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: var(--shadow-float);
+  flex-direction: column;
+  gap: 9px;
+}
+
+.layers-widget.expanded .layers-popover {
+  display: flex;
+}
+
+.layer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 0.76rem;
+}
+
+.layer-row label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.layer-row input[type="checkbox"] {
+  accent-color: var(--accent-blue);
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+}
+
+.layer-row input[type="range"] {
+  width: 84px;
+  accent-color: var(--accent-rust);
+  cursor: pointer;
+}
+
+.legend {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 8px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.legend:empty {
+  display: none;
+}
+
+/* ---------- 8. Bottom-right controls & telemetry ---------- */
+.bottom-right-controls {
+  position: fixed;
+  bottom: 52px;
+  right: 14px;
+  z-index: 44;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.control-stack {
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-float);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.map-tool-btn {
+  width: 38px;
+  height: 38px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-subtle);
+  font-family: var(--font-mono);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.map-tool-btn:last-child {
+  border-bottom: none;
+}
+
+.map-tool-btn:hover {
+  background: var(--surface-hover);
+  color: var(--accent-blue);
+}
+
+.map-tool-btn.active {
+  background: var(--accent-blue);
+  color: #070a10;
+}
+
+.measure-pill {
+  position: fixed;
+  bottom: 56px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 46;
+  display: none;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--accent-blue);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  box-shadow: var(--shadow-float);
+}
+
+.measure-pill.visible {
+  display: flex;
+}
+
+.measure-pill strong {
+  color: var(--accent-blue);
+}
+
+.telemetry-bar {
+  position: fixed;
+  bottom: 12px;
+  right: 14px;
+  z-index: 43;
+  background: rgba(9, 11, 17, 0.84);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 5px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  max-width: calc(100vw - 28px);
+  overflow: hidden;
+}
+
+/* OpenLayers ScaleLine renders inside #scale-line-container (Stage 2).
+   These overrides make it sit inline in the telemetry bar. */
+#scale-line-container .ol-scale-line {
+  position: static;
+  background: transparent;
+  padding: 0;
+}
+
+#scale-line-container .ol-scale-line-inner {
+  border-color: var(--text-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  margin: 0;
+}
+
+/* ---------- 9. Toasts ---------- */
+.toast-container {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+
+.toast-pill {
+  background: var(--surface-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--accent-blue);
+  border-radius: 999px;
+  padding: 8px 16px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  box-shadow: var(--shadow-float);
+  animation: fadeSlideIn 0.22s ease;
+}
+
+@keyframes fadeSlideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---------- 10. Responsive ---------- */
+@media (max-width: 760px) {
+  .data-pill { display: none; }
+  .left-drawer {
+    top: auto;
+    bottom: 70px;
+    max-height: 55vh;
+  }
+  .telemetry-bar { display: none; }
+}

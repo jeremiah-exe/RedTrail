@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jezero Route Planner — Mars Terrain-Aware Routing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+
+  <!-- Full-bleed map. OpenLayers will render into #map in Stage 2. -->
+  <div id="map-viewport">
+    <div id="map">
+      <div id="map-placeholder">Map placeholder — OpenLayers loads here in Stage 2</div>
+    </div>
+  </div>
+
+  <!-- TOP-LEFT: title + coordinate search -->
+  <div class="top-left-cluster">
+    <div class="search-box-card">
+      <span class="brand-mark">◉</span>
+      <input
+        type="text"
+        id="coord-search-input"
+        placeholder="Go to coordinates (x, y in map metres)…"
+        autocomplete="off"
+      />
+      <button type="button" id="btn-coord-search" class="icon-btn" title="Go">➤</button>
+    </div>
+  </div>
+
+  <!-- TOP-RIGHT: data provenance pill (real sources only) -->
+  <div class="top-right-cluster">
+    <div class="data-pill" title="Datasets used by this application">
+      <strong>DATA:</strong>
+      <span>USGS CTX 5 m imagery · CTX DEM 20 m · derived slope</span>
+    </div>
+  </div>
+
+  <!-- LEFT DRAWER: point selection, route planner, comparison -->
+  <button type="button" id="drawer-reopen-tab" class="drawer-reopen-tab">☰ Open Route Planner</button>
+
+  <aside id="left-drawer" class="left-drawer">
+    <div class="drawer-header">
+      <div>
+        <div class="eyebrow">JEZERO CRATER · MARS</div>
+        <h1 class="drawer-title">Terrain-Aware Route Planner</h1>
+      </div>
+      <button type="button" id="btn-collapse-drawer" class="icon-btn" title="Collapse panel">✕</button>
+    </div>
+
+    <div class="drawer-scroll">
+
+      <!-- Section 1: start / destination -->
+      <section class="panel-section">
+        <div class="section-title">1 · Select points</div>
+        <div class="point-row" id="row-start">
+          <span class="point-dot start">A</span>
+          <div class="point-info">
+            <div class="point-label">Start</div>
+            <div class="point-coords" id="start-coords">Click the map to set</div>
+          </div>
+          <button type="button" id="btn-pick-start" class="chip-btn">Pick</button>
+        </div>
+        <div class="point-row" id="row-dest">
+          <span class="point-dot dest">B</span>
+          <div class="point-info">
+            <div class="point-label">Destination</div>
+            <div class="point-coords" id="dest-coords">Click the map to set</div>
+          </div>
+          <button type="button" id="btn-pick-dest" class="chip-btn">Pick</button>
+        </div>
+        <div class="button-row">
+          <button type="button" id="btn-swap" class="chip-btn">⇅ Swap</button>
+          <button type="button" id="btn-reset" class="chip-btn">Reset</button>
+          <button type="button" id="btn-calc-routes" class="primary-btn" disabled>Calculate routes</button>
+        </div>
+        <p class="hint-text" id="selection-status">No points selected.</p>
+      </section>
+
+      <!-- Section 2: terrain at cursor/selected point -->
+      <section class="panel-section">
+        <div class="section-title">2 · Terrain at selected point</div>
+        <div class="tele-grid">
+          <div class="tele-box">
+            <div class="tele-label">Elevation (DEM)</div>
+            <div class="tele-val" id="tele-elev">—</div>
+          </div>
+          <div class="tele-box">
+            <div class="tele-label">Slope (derived)</div>
+            <div class="tele-val" id="tele-slope">—</div>
+          </div>
+        </div>
+        <p class="hint-text">Values come from the 20 m CTX DEM and the slope raster computed from it. Shown once terrain data loads (Stage 3).</p>
+      </section>
+
+      <!-- Section 3: route comparison -->
+      <section class="panel-section">
+        <div class="section-title">3 · Route comparison</div>
+
+        <div class="route-card shortest" id="card-shortest">
+          <div class="route-card-head">
+            <span class="route-swatch"></span>
+            <strong>Shortest traversable</strong>
+          </div>
+          <p class="route-desc">Minimises distance over valid cells. Does not penalise slope.</p>
+          <div class="kpi-grid">
+            <div class="kpi"><span>Distance</span><strong id="sh-dist">—</strong></div>
+            <div class="kpi"><span>Avg slope</span><strong id="sh-avg">—</strong></div>
+            <div class="kpi"><span>Max slope</span><strong id="sh-max">—</strong></div>
+            <div class="kpi"><span>Elev. gain</span><strong id="sh-gain">—</strong></div>
+            <div class="kpi"><span>Est. time*</span><strong id="sh-time">—</strong></div>
+            <div class="kpi"><span>Terrain cost</span><strong id="sh-cost">—</strong></div>
+          </div>
+        </div>
+
+        <div class="route-card terrain" id="card-terrain">
+          <div class="route-card-head">
+            <span class="route-swatch"></span>
+            <strong>Terrain-aware</strong>
+          </div>
+          <p class="route-desc">Minimises distance × slope penalty. May be longer to avoid steeper ground.</p>
+          <div class="kpi-grid">
+            <div class="kpi"><span>Distance</span><strong id="tr-dist">—</strong></div>
+            <div class="kpi"><span>Avg slope</span><strong id="tr-avg">—</strong></div>
+            <div class="kpi"><span>Max slope</span><strong id="tr-max">—</strong></div>
+            <div class="kpi"><span>Elev. gain</span><strong id="tr-gain">—</strong></div>
+            <div class="kpi"><span>Est. time*</span><strong id="tr-time">—</strong></div>
+            <div class="kpi"><span>Terrain cost</span><strong id="tr-cost">—</strong></div>
+          </div>
+        </div>
+
+        <div class="direct-line-row">
+          <span class="route-swatch direct"></span>
+          <span>Direct line (reference distance only, not a walkable route):</span>
+          <strong id="direct-dist">—</strong>
+        </div>
+
+        <p class="hint-text" id="route-explanation">Route trade-offs will be explained here after calculation.</p>
+        <p class="hint-text">* Time uses a stated walking-speed assumption (set in a later stage). Slope penalties are experimental, not validated astronaut mobility limits. No route is guaranteed safe.</p>
+      </section>
+
+      <!-- Section 4: elevation profile -->
+      <section class="panel-section">
+        <div class="section-title">4 · Elevation profile</div>
+        <div class="profile-box">
+          <svg id="elevation-profile-svg" viewBox="0 0 340 100" preserveAspectRatio="none"></svg>
+          <div class="profile-empty" id="profile-empty">Calculate routes to see profiles</div>
+        </div>
+      </section>
+
+    </div>
+  </aside>
+
+  <!-- BOTTOM-LEFT: layers widget -->
+  <div class="layers-widget" id="layers-widget">
+    <button type="button" id="btn-layers" class="layers-thumb">◫ Layers</button>
+    <div class="layers-popover">
+      <div class="section-title">Map layers</div>
+      <div class="layer-row">
+        <label><input type="checkbox" id="layer-ortho" checked /> CTX orthomosaic (5 m)</label>
+        <input type="range" id="opacity-ortho" min="0" max="100" value="100" />
+      </div>
+      <div class="layer-row">
+        <label><input type="checkbox" id="layer-slope" /> Slope (degrees, derived)</label>
+        <input type="range" id="opacity-slope" min="0" max="100" value="60" />
+      </div>
+      <div class="layer-row">
+        <label><input type="checkbox" id="layer-slope-classes" /> Slope classes (experimental)</label>
+        <input type="range" id="opacity-slope-classes" min="0" max="100" value="60" />
+      </div>
+      <div class="layer-row">
+        <label><input type="checkbox" id="layer-routes" checked /> Routes &amp; markers</label>
+      </div>
+      <div id="legend-container" class="legend"></div>
+    </div>
+  </div>
+
+  <!-- BOTTOM-RIGHT: map tools -->
+  <div class="bottom-right-controls">
+    <div class="control-stack">
+      <button type="button" id="btn-measure" class="map-tool-btn" title="Measure distance">📏</button>
+    </div>
+    <div class="control-stack">
+      <button type="button" id="btn-zoom-in" class="map-tool-btn" title="Zoom in">+</button>
+      <button type="button" id="btn-zoom-out" class="map-tool-btn" title="Zoom out">−</button>
+    </div>
+  </div>
+
+  <!-- Measure readout -->
+  <div id="measure-pill" class="measure-pill">
+    <strong>📏 MEASURE:</strong>
+    <span id="measure-readout">Click map points to measure</span>
+    <button type="button" id="btn-measure-clear" class="chip-btn">Clear</button>
+  </div>
+
+  <!-- BOTTOM: scale bar + cursor telemetry -->
+  <div class="telemetry-bar">
+    <div id="scale-line-container"></div>
+    <span>|</span>
+    <span id="cursor-coords">x —, y —</span>
+    <span>|</span>
+    <span id="cursor-elev">ELEV —</span>
+    <span>|</span>
+    <span id="cursor-slope">SLOPE —</span>
+  </div>
+
+  <div id="toast-container" class="toast-container"></div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
