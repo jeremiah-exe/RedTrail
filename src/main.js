@@ -1,4 +1,10 @@
+import 'ol/ol.css';
 import './style.css';
+import {
+  initMap, zoomBy, setOrthoVisible, setOrthoOpacity, marsXYToLatLon,
+  parseCoordinateInput, showSearchMarker, flyToXY,
+  initOverlays, isMeasureActive, setMeasureActive, undoLastMeasurePoint, clearMeasurement,
+} from './map.js';
 
 /* ==========================================================================
    main.js — application entry point
@@ -83,15 +89,10 @@ function initLayersWidget() {
 
 function initPlaceholderButtons() {
   const later = {
-    'btn-coord-search': 'Coordinate search arrives in Stage 2 (needs the map projection).',
     'btn-pick-start': 'Point selection arrives in Stage 4.',
     'btn-pick-dest': 'Point selection arrives in Stage 4.',
     'btn-swap': 'Point selection arrives in Stage 4.',
     'btn-reset': 'Point selection arrives in Stage 4.',
-    'btn-measure': 'Measure tool arrives in Stage 2 (needs the map).',
-    'btn-measure-clear': 'Measure tool arrives in Stage 2 (needs the map).',
-    'btn-zoom-in': 'Zoom controls arrive in Stage 2 (needs the map).',
-    'btn-zoom-out': 'Zoom controls arrive in Stage 2 (needs the map).',
   };
 
   Object.entries(later).forEach(([id, message]) => {
@@ -106,11 +107,80 @@ function initPlaceholderButtons() {
 
 /* ---------- Start-up ---------- */
 
+/* ---------- Map wiring ---------- */
+
+function formatCursor([x, y]) {
+  const { lat, lon } = marsXYToLatLon(x, y);
+  const fmt = (n) => Math.round(n).toLocaleString('en-US');
+  const ns = lat >= 0 ? 'N' : 'S';
+  return `x ${fmt(x)} m · y ${fmt(y)} m · ${Math.abs(lat).toFixed(4)}°${ns} ${lon.toFixed(4)}°E`;
+}
+
+function formatDistance(m) {
+  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
+}
+
+function renderMeasure({ active, count, totalM, lastM }) {
+  $('btn-measure').classList.toggle('active', active);
+  $('measure-pill').classList.toggle('visible', active || count > 0);
+
+  let text;
+  if (count === 0) text = 'Click map points to measure';
+  else if (count === 1) text = 'Click a second point';
+  else text = `${formatDistance(totalM)} total · last leg ${formatDistance(lastM)} · ${count} points`;
+  $('measure-readout').textContent = text;
+}
+
+function runCoordinateSearch() {
+  const result = parseCoordinateInput($('coord-search-input').value);
+  if (!result.ok) {
+    showToast(result.error, 5000);
+    return;
+  }
+  showSearchMarker(result.x, result.y);
+  flyToXY(result.x, result.y);
+  const { lat, lon } = marsXYToLatLon(result.x, result.y);
+  showToast(`Went to ${lat.toFixed(4)}°N, ${lon.toFixed(4)}°E (read as ${result.kind})`);
+}
+
+function initMapControls() {
+  $('btn-zoom-in').addEventListener('click', () => zoomBy(1));
+  $('btn-zoom-out').addEventListener('click', () => zoomBy(-1));
+
+  $('layer-ortho').addEventListener('change', (e) => setOrthoVisible(e.target.checked));
+  $('opacity-ortho').addEventListener('input', (e) => setOrthoOpacity(Number(e.target.value) / 100));
+
+  // Coordinate search
+  $('btn-coord-search').addEventListener('click', runCoordinateSearch);
+
+  // Measure tool
+  $('btn-measure').addEventListener('click', () => setMeasureActive(!isMeasureActive()));
+  $('btn-measure-clear').addEventListener('click', clearMeasurement);
+  document.addEventListener('keydown', (e) => {
+    if (e.target.matches('input, textarea')) return; // don't hijack typing
+    if (e.key === 'Escape' && isMeasureActive()) setMeasureActive(false);
+    if (e.key === 'Backspace' && isMeasureActive()) undoLastMeasurePoint();
+  });
+}
+
+/* ---------- Start-up ---------- */
+
 function init() {
   initDrawer();
   initLayersWidget();
   initPlaceholderButtons();
-  console.log('[app] Stage 1 UI shell ready.');
+
+  initMap({
+    target: $('map'),
+    onPointerMove: (coord) => {
+      $('cursor-coords').textContent = formatCursor(coord);
+    },
+    onError: (msg) => showToast(msg, 6000),
+  });
+  initOverlays({ onMeasureChange: renderMeasure });
+  initMapControls();
+
+  console.log('[app] Stage 2: map, search and measure ready.');
 }
 
 init();
