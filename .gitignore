@@ -11,8 +11,6 @@ dist/
 !.env.example
 
 # Local terrain datasets (large files)
-public/data/*.tif
-public/data/*.tiff
 public/data/*.vrt
 public/data/*.img
 public/data/*.aux.xml
