@@ -516,7 +516,7 @@ button {
 }
 
 #elevation-profile-svg {
-  width: 100%;
+  width: auto;
   height: 100px;
   display: block;
 }
@@ -805,4 +805,53 @@ button {
 
 .setting-row input[type="number"]:focus {
   border-color: var(--accent-blue);
+}
+
+/* ---------- Route comparison extras (Stage 6) ---------- */
+.explain-box {
+  margin-top: 8px;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.explain-box p { margin-bottom: 7px; }
+.explain-box p:last-child { margin-bottom: 0; }
+
+.exposure { margin-top: 9px; }
+
+.exposure-title {
+  font-family: var(--font-mono);
+  font-size: 0.56rem;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.exposure-bar {
+  display: flex;
+  height: 8px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.exposure-bar span { display: block; height: 100%; }
+
+.exposure-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 5px;
+  font-family: var(--font-mono);
+  font-size: 0.58rem;
+  color: var(--text-secondary);
+}
+
+.exposure-legend i {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: -1px;
 }

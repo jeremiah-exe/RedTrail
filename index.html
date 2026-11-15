@@ -105,7 +105,12 @@
       <!-- Section 3: route comparison -->
       <section class="panel-section">
         <div class="section-title">3 · Route comparison</div>
-
+        <div class="setting-row">
+          <label for="flat-speed-input">Flat-ground walking speed</label>
+          <input type="number" id="flat-speed-input" min="0.5" max="6" step="0.1" value="3.0" />
+          <span>km/h</span>
+        </div>
+        <p class="hint-text">Assumed value, not a validated EVA pace. It sets the pace on level ground; Tobler's hiking function then slows or speeds each step according to its gradient.</p>
         <div class="route-card shortest" id="card-shortest">
           <div class="route-card-head">
             <span class="route-swatch"></span>
@@ -120,6 +125,7 @@
             <div class="kpi"><span>Est. time*</span><strong id="sh-time">—</strong></div>
             <div class="kpi"><span>Terrain cost</span><strong id="sh-cost">—</strong></div>
           </div>
+          <div class="exposure" id="sh-exposure"></div>
         </div>
 
         <div class="route-card terrain" id="card-terrain">
@@ -136,6 +142,7 @@
             <div class="kpi"><span>Est. time*</span><strong id="tr-time">—</strong></div>
             <div class="kpi"><span>Terrain cost</span><strong id="tr-cost">—</strong></div>
           </div>
+          <div class="exposure" id="tr-exposure"></div>
         </div>
 
         <div class="direct-line-row">
@@ -144,17 +151,20 @@
           <strong id="direct-dist">—</strong>
         </div>
 
-        <p class="hint-text" id="route-explanation">Route trade-offs will be explained here after calculation.</p>
-        <p class="hint-text">* Time uses a stated walking-speed assumption (set in a later stage). Slope penalties are experimental, not validated astronaut mobility limits. No route is guaranteed safe.</p>
+        <div class="explain-box" id="route-explanation">
+          <p>Route trade-offs will be explained here after calculation.</p>
+        </div>
+        <p class="hint-text">* Time = along-surface distance ÷ pace, where the pace is the flat-ground speed above adjusted for each step's gradient by Tobler's hiking function (developed for hikers on Earth, not validated for spacesuited Mars EVA). Terrain cost = along-surface distance × the experimental slope penalty (1.0 / 1.5 / 3.0 / 8.0), in metre-equivalents. Slope exposure uses the average slope of each step. Elevation gain adds up every upward step on the 20 m DEM, so small-scale noise overstates it slightly. Penalties, pace and the slope limit are assumptions. No route is guaranteed safe.</p>
       </section>
 
       <!-- Section 4: elevation profile -->
       <section class="panel-section">
         <div class="section-title">4 · Elevation profile</div>
         <div class="profile-box">
-          <svg id="elevation-profile-svg" viewBox="0 0 340 100" preserveAspectRatio="none"></svg>
+          <svg id="elevation-profile-svg" viewBox="0 0 340 150"></svg>
           <div class="profile-empty" id="profile-empty">Calculate routes to see profiles</div>
         </div>
+        <p class="hint-text">Elevation from the 20 m DEM against distance along the surface, for both routes.</p>
       </section>
 
     </div>

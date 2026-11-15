@@ -9,6 +9,8 @@ import {
 } from './map.js';
 import { computeRoutes, verifyRoute, ROUTING_CONFIG } from './routing.js';
 import { loadTerrain, sampleAt, getCell, findValidCell } from './terrain.js';
+import { analyzeRoute, explainRoutes, fmtDist, fmtTime, fmtCost, verifyStats, SPEED_CONFIG } from './analysis.js';
+import { renderProfile, clearProfile } from './profile.js';
 
 /* ==========================================================================
    main.js — application entry point
@@ -262,13 +264,10 @@ function initSelectionControls() {
   renderSelection();
 }
 
-/* ---------- Route calculation (Stage 5) ---------- */
+/* ---------- Route calculation and comparison (Stages 5 + 6) ---------- */
 
-let routesCurrent = null;
-
-function fmtDist(m) {
-  return m < 1000 ? `${Math.round(m)} m` : `${(m / 1000).toFixed(2)} km`;
-}
+let routesCurrent = null; // result of computeRoutes()
+let statsCurrent = null; // { shortest, terrain, flatSpeedKmh }
 
 function readMaxSlope() {
   const input = $('max-slope-input');
@@ -279,13 +278,77 @@ function readMaxSlope() {
   return v;
 }
 
+function readFlatSpeed() {
+  const input = $('flat-speed-input');
+  let v = parseFloat(input.value);
+  if (!Number.isFinite(v)) v = SPEED_CONFIG.defaultKmh;
+  v = Math.max(SPEED_CONFIG.minKmh, Math.min(SPEED_CONFIG.maxKmh, v));
+  input.value = v.toFixed(1);
+  return v;
+}
+
+function setExplanation(paragraphs) {
+  $('route-explanation').replaceChildren(
+    ...paragraphs.map((text) => {
+      const p = document.createElement('p');
+      p.textContent = text;
+      return p;
+    })
+  );
+}
+
+function exposureHtml(st) {
+  const n = st.exposure.length;
+  const shade = (i) => (0.25 + (0.75 * i) / Math.max(1, n - 1)).toFixed(2);
+  const pctText = (f) => (f > 0 && f < 0.005 ? '<1%' : `${Math.round(f * 100)}%`);
+  const bar = st.exposure
+    .map((f, i) => `<span style="width:${(f * 100).toFixed(2)}%;background:rgba(167,139,250,${shade(i)})"></span>`)
+    .join('');
+  const legend = st.exposure
+    .map((f, i) => `<span><i style="background:rgba(167,139,250,${shade(i)})"></i>${st.classLabels[i]} ${pctText(f)}</span>`)
+    .join('');
+  return `<div class="exposure-title">DISTANCE BY SLOPE CLASS</div><div class="exposure-bar">${bar}</div><div class="exposure-legend">${legend}</div>`;
+}
+
+function fillRouteCard(prefix, st) {
+  $(`${prefix}-dist`).textContent = fmtDist(st.surfaceM);
+  $(`${prefix}-avg`).textContent = `${st.avgSlopeDeg.toFixed(1)}°`;
+  $(`${prefix}-max`).textContent = `${st.maxSlopeDeg.toFixed(1)}°`;
+  $(`${prefix}-gain`).textContent = `+${Math.round(st.gainM)} m`;
+  $(`${prefix}-time`).textContent = fmtTime(st.timeH);
+  $(`${prefix}-cost`).textContent = fmtCost(st.terrainCost);
+  $(`${prefix}-exposure`).innerHTML = exposureHtml(st);
+}
+
+function clearRouteCard(prefix) {
+  ['dist', 'avg', 'max', 'gain', 'time', 'cost'].forEach((f) => ($(`${prefix}-${f}`).textContent = '—'));
+  $(`${prefix}-exposure`).innerHTML = '';
+}
+
 function clearRouteResults() {
   routesCurrent = null;
+  statsCurrent = null;
   clearRoutes();
-  $('sh-dist').textContent = '—';
-  $('tr-dist').textContent = '—';
+  clearRouteCard('sh');
+  clearRouteCard('tr');
   $('direct-dist').textContent = '—';
-  $('route-explanation').textContent = 'Route trade-offs will be explained here after calculation.';
+  setExplanation(['Route trade-offs will be explained here after calculation.']);
+  clearProfile($('elevation-profile-svg'), $('profile-empty'));
+}
+
+/** Recomputes all statistics and redraws the cards, explanation and chart. Cheap: does not re-run A*. */
+function renderComparison() {
+  if (!routesCurrent) return;
+  const speed = readFlatSpeed();
+  const s = analyzeRoute(routesCurrent.shortest, { flatSpeedKmh: speed });
+  const t = analyzeRoute(routesCurrent.terrain, { flatSpeedKmh: speed });
+  statsCurrent = { shortest: s, terrain: t, flatSpeedKmh: speed };
+
+  fillRouteCard('sh', s);
+  fillRouteCard('tr', t);
+  $('direct-dist').textContent = `${fmtDist(routesCurrent.direct.horizontalM)} (horizontal)`;
+  setExplanation(explainRoutes(routesCurrent, s, t, speed));
+  renderProfile($('elevation-profile-svg'), $('profile-empty'), s, t);
 }
 
 async function calculateRoutes() {
@@ -300,7 +363,7 @@ async function calculateRoutes() {
 
     if (result.status === 'error') {
       clearRouteResults();
-      $('route-explanation').textContent = result.message;
+      setExplanation([result.message]);
       showToast(result.message, 9000);
       return;
     }
@@ -312,20 +375,7 @@ async function calculateRoutes() {
       terrain: result.terrain.coords,
     });
     fitToCoordinates(result.shortest.coords.concat(result.terrain.coords));
-
-    $('sh-dist').textContent = fmtDist(result.shortest.surfaceM);
-    $('tr-dist').textContent = fmtDist(result.terrain.surfaceM);
-    $('direct-dist').textContent = `${fmtDist(result.direct.horizontalM)} (horizontal)`;
-
-    if (result.identical) {
-      $('route-explanation').textContent =
-        `Both searches found the same path (${fmtDist(result.shortest.surfaceM)} along the surface) under the ${result.maxSlopeDeg}° slope limit.`;
-    } else {
-      const pct = ((result.terrain.surfaceM - result.shortest.surfaceM) / result.shortest.surfaceM) * 100;
-      $('route-explanation').textContent =
-        `Shortest traversable: ${fmtDist(result.shortest.surfaceM)}. Terrain-aware: ${fmtDist(result.terrain.surfaceM)} ` +
-        `(${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%). Distances are along the surface; slope limit ${result.maxSlopeDeg}°. Full comparison arrives in Stage 6.`;
-    }
+    renderComparison();
   } catch (err) {
     console.error('[routing] failed', err);
     showToast(`Routing error: ${err.message}`, 8000);
@@ -340,6 +390,10 @@ function initRouteControls() {
   $('max-slope-input').addEventListener('change', () => {
     readMaxSlope();
     clearRouteResults(); // old routes were computed under a different limit
+  });
+  $('flat-speed-input').addEventListener('change', () => {
+    readFlatSpeed();
+    renderComparison(); // only the time estimate changes
   });
   $('layer-routes').addEventListener('change', (e) => setRouteOverlaysVisible(e.target.checked));
 }
@@ -433,9 +487,21 @@ function init() {
         shortest: verifyRoute(routesCurrent.shortest, routesCurrent.maxSlopeDeg),
         terrain: verifyRoute(routesCurrent.terrain, routesCurrent.maxSlopeDeg),
       },
+    verifyStatsLast: () =>
+      statsCurrent && {
+        shortest: verifyStats(routesCurrent.shortest, statsCurrent.shortest, statsCurrent.flatSpeedKmh),
+        terrain: verifyStats(routesCurrent.terrain, statsCurrent.terrain, statsCurrent.flatSpeedKmh),
+      },
+    // elevation and slope of every cell on a route: pathCells('shortest') or pathCells('terrain')
+    pathCells: (which) =>
+      routesCurrent &&
+      Array.from(routesCurrent[which].pathIdx, (i) => {
+        const c = getCell(i % 4456, Math.floor(i / 4456)); // grid width is 4456 cells
+        return { col: c.col, row: c.row, elev: c.elevation, slope: c.slope };
+      }),
   };
 
-  console.log('[app] Stage 5: routing ready.');
+  console.log('[app] Stage 6: route comparison ready.');
 }
 
 init();
